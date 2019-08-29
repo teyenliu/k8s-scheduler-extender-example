@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
+	"errors"
 	"github.com/comail/colog"
 	"github.com/julienschmidt/httprouter"
 
@@ -29,22 +29,41 @@ var (
 
 	TruePredicate = Predicate{
 		Name: "always_true",
-		Func: func(pod v1.Pod, node v1.Node) (bool, error) {
-			return true, nil
+		Func: func(pod v1.Pod, node v1.Node,mem int,gputype string) (bool, error) {
+			nodeinfo := node.ObjectMeta.Annotations["GPUInfo"]
+                        score := Podinfo(node.Name,mem,nodeinfo,gputype)
+			if gputype == "memory"{
+				if score <= 0{
+					return true, nil
+				}else{
+					return false,errors.New("GPU MEM not enough\n")
+				}
+			}else{
+				if score > 0{
+                                        return true, nil
+                                }else{
+                                        return false,errors.New("GPU Count not enough\n")
+                                }
+
+			}
 		},
 	}
 
 	ZeroPriority = Prioritize{
 		Name: "zero_score",
-		Func: func(_ v1.Pod, nodes []v1.Node) (*schedulerapi.HostPriorityList, error) {
+		Func: func(_ v1.Pod, nodes []v1.Node, mem int,gputype string) (*schedulerapi.HostPriorityList, error) {
 			var priorityList schedulerapi.HostPriorityList
 			priorityList = make([]schedulerapi.HostPriority, len(nodes))
 			for i, node := range nodes {
+				nodeinfo := node.ObjectMeta.Annotations["GPUInfo"]
+				score := Podinfo(node.Name,mem,nodeinfo,gputype)
 				priorityList[i] = schedulerapi.HostPriority{
 					Host:  node.Name,
-					Score: 0,
+					Score: score,
 				}
+
 			}
+			log.Printf("entry zeropriority\n")
 			return &priorityList, nil
 		},
 	}
